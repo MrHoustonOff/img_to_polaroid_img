@@ -4,8 +4,18 @@ from . import config
 
 def apply_grain(image: Image.Image, seed: int = None, intensity: float = None) -> Image.Image:
     """
-    Наладывает "облачное" пленочное зерно (Grain 2.0).
-    Использует параметры из config.py
+    Накладывает "облачное" пленочное зерно (Grain 2.0).
+
+    Генерирует шум в уменьшенном разрешении и растягивает его бикубическим методом,
+    создавая мягкую, органичную текстуру, характерную для моментальной фотографии.
+
+    Args:
+        image (Image.Image): Исходное изображение.
+        seed (int, optional): Сид для генератора случайных чисел (для воспроизводимости).
+        intensity (float, optional): Сила наложения зерна. Если None, берется из config.
+
+    Returns:
+        Image.Image: Изображение с наложенным зерном.
     """
     if intensity is None:
         intensity = config.GRAIN_INTENSITY

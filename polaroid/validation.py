@@ -1,30 +1,32 @@
+from PIL import Image
 from . import config
 from .exceptions import ImageValidationError
 
-
 def validate_image_dimensions(width: int, height: int) -> None:
     """
-    Проверяет корректность размеров изображения.
+    Проверяет, соответствует ли изображение минимальным требованиям.
 
     Args:
-        width (int): Ширина изображения в пикселях.
-        height (int): Высота изображения в пикселях.
+        width (int): Ширина изображения.
+        height (int): Высота изображения.
 
     Raises:
-        ImageValidationError: Если размеры слишком малы или нарушено соотношение сторон.
+        ImageValidationError: Если изображение слишком маленькое или имеет 
+                              экстремальное соотношение сторон.
     """
-    # 1. Проверка на минимальный физический размер
-    if width < config.MIN_IMAGE_SIZE or height < config.MIN_IMAGE_SIZE:
+    # 1. Проверка минимального размера
+    min_size = config.MIN_IMAGE_SIZE
+    if width < min_size or height < min_size:
         raise ImageValidationError(
             f"Image is too small ({width}x{height}). "
-            f"Minimum dimension is {config.MIN_IMAGE_SIZE}px."
+            f"Minimum dimension is {min_size}px."
         )
 
-    # 2. Проверка соотношения сторон
-    aspect_ratio = width / height
-
-    if not (config.MIN_ASPECT_RATIO <= aspect_ratio <= config.MAX_ASPECT_RATIO):
+    # 2. Проверка соотношения сторон (Aspect Ratio)
+    # Чтобы не обрабатывать узкие "сосиски" или плоские линии
+    ratio = width / height
+    if ratio < config.MIN_ASPECT_RATIO or ratio > config.MAX_ASPECT_RATIO:
         raise ImageValidationError(
-            f"Invalid aspect ratio {aspect_ratio:.2f}. "
-            f"Allowed range: [{config.MIN_ASPECT_RATIO} - {config.MAX_ASPECT_RATIO}]."
+            f"Extreme aspect ratio ({ratio:.2f}). "
+            f"Supported range: {config.MIN_ASPECT_RATIO} to {config.MAX_ASPECT_RATIO}."
         )

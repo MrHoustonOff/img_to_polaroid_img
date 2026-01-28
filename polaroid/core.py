@@ -1,5 +1,5 @@
 import random
-from PIL import Image, ImageFilter, ImageOps, ImageChops, ImageDraw
+from PIL import Image, ImageFilter, ImageChops, ImageDraw
 from . import validation
 from . import geometry
 from . import config
@@ -11,10 +11,37 @@ from .debug import Debugger
 from .data import PolaroidResult
 
 def process_image(image: Image.Image, profile: str = "classic", debug: bool = False, **kwargs) -> PolaroidResult:
+    """
+    Основной пайплайн обработки изображения: от проявки до сборки в картридж.
+
+    Этапы:
+    1. Валидация размеров.
+    2. Химическая проявка (цветокоррекция).
+    3. Оптические искажения (виньетка, аберрации).
+    4. Наложение пленочного зерна.
+    5. Генерация корпуса (рамки) с учетом брака (поворота).
+    6. Сборка финального композита с тенями, каймой и масками.
+
+    Args:
+        image (Image.Image): Исходное изображение.
+        profile (str, optional): Профиль обработки (пока только "classic"). Defaults to "classic".
+        debug (bool, optional): Сохранять ли промежуточные этапы в папку _debug. Defaults to False.
+        **kwargs: Дополнительные параметры (seed, rotation_angle и др.).
+
+    Returns:
+        PolaroidResult: Объект с финальным изображением и метаданными (маска, координаты).
+    """
     debugger = Debugger(enabled=debug)
     debugger.save(image, "step0_original")
 
     validation.validate_image_dimensions(image.width, image.height)
+
+    # === ОПТИМИЗАЦИЯ: SMART CAP ===
+    # Ограничиваем максимальную сторону до 2500px для ускорения рендера,
+    # сохраняя качество за счет алгоритма LANCZOS.
+    max_dimension = 2500
+    if max(image.width, image.height) > max_dimension:
+        image.thumbnail((max_dimension, max_dimension), Image.LANCZOS)
 
     limit = config.PHOTO_ROTATION_LIMIT
     rotation_angle = random.uniform(-limit, limit)
@@ -45,38 +72,30 @@ def process_image(image: Image.Image, profile: str = "classic", debug: bool = Fa
     
     target_w, target_h = grainy_photo.size
     
-    # 1. Вычисляем размеры с запасом (Oversize)
-    # ВАЖНО: Добавляем одинаковое кол-во пикселей к ширине и высоте,
-    # чтобы при обрезке тень срезалась равномерно со всех сторон.
+    # Расчет увеличенных размеров для компенсации поворота (Oversize)
+    # Добавляем буфер равномерно ко всем сторонам.
     oversize_factor = config.PHOTO_ROTATION_OVERSIZE
-    
-    # Считаем запас на основе максимальной стороны (чтобы точно хватило на поворот)
     max_dim = max(target_w, target_h)
     buffer_px = int(max_dim * (oversize_factor - 1.0))
     
-    # Делаем число четным для чистого центрирования
     if buffer_px % 2 != 0:
         buffer_px += 1
         
     over_w = target_w + buffer_px
     over_h = target_h + buffer_px
     
-    # Растягиваем фото на новый размер. 
-    # Небольшое искажение пропорций (если фото не квадратное) на 3% незаметно,
-    # зато гарантирует равномерность рамки.
     oversized_photo = grainy_photo.resize((over_w, over_h), Image.BICUBIC)
     
-    # 2. Маска для увеличенного размера
+    # Генерация маски и подложки для увеличенного размера
     photo_mask_over = chassis.create_photo_mask((over_w, over_h), image.width)
     
-    # 3. Слой фото
     photo_block_over = Image.new("RGBA", (over_w, over_h), (0, 0, 0, 0))
     photo_content = oversized_photo.convert("RGBA")
     photo_content.putalpha(photo_mask_over)
     photo_block_over.paste(photo_content, (0, 0))
     
-    # Вспомогательная функция для генерации кольца
     def create_ring_mask(w, h, depth_ratio, radius_ratio):
+        """Вспомогательная функция для создания кольцевых масок (тень, кайма)."""
         depth_px = int(image.width * depth_ratio)
         mask_outer = photo_mask_over.copy()
         mask_inner = Image.new("L", (w, h), 0)
@@ -117,7 +136,7 @@ def process_image(image: Image.Image, profile: str = "classic", debug: bool = Fa
         
         photo_block_over.alpha_composite(fringe_layer)
 
-    # 5. Слой тени (Shadow)
+    # 5. Слой внутренней тени (Shadow)
     shadow_ring = create_ring_mask(over_w, over_h, config.SHADOW_DEPTH, config.PHOTO_CORNER_RADIUS)
     
     blur_px = int(image.width * config.SHADOW_BLUR)
@@ -133,16 +152,13 @@ def process_image(image: Image.Image, profile: str = "classic", debug: bool = Fa
     
     photo_block_over.alpha_composite(shadow_fill)
 
-    # 6. Вращение
+    # 6. Вращение всего блока (Фото + Эффекты)
     if rotation_angle != 0:
         rotated_block_over = photo_block_over.rotate(rotation_angle, resample=Image.BICUBIC)
     else:
         rotated_block_over = photo_block_over
         
-    # 7. Обрезка (Crop) - Возвращаем к исходному размеру
-    # Так как мы добавили одинаковый buffer_px ко всем сторонам,
-    # мы обрежем одинаковое количество пикселей сверху и сбоку.
-    # Тень останется равномерной.
+    # 7. Финальная обрезка (Crop) до исходного размера
     left = (over_w - target_w) // 2
     top = (over_h - target_h) // 2
     right = left + target_w
@@ -151,30 +167,18 @@ def process_image(image: Image.Image, profile: str = "classic", debug: bool = Fa
     final_photo_block = rotated_block_over.crop((left, top, right, bottom))
     
     final_composite.paste(final_photo_block, layout.photo_pos, final_photo_block)
-    
     debugger.save(final_composite, "step5_photo_block_rotated_cropped")
 
     final_composite.alpha_composite(cartridge_layer)
 
-    # === ГЕНЕРАЦИЯ ПРАВИЛЬНОЙ МАСКИ ВЫРЕЗА (MASK EXPORT) ===
-    # Нам нужна маска, которая соответствует тому, что видит пользователь:
-    # Повернутое фото + черные поля вокруг.
-    
-    # 1. Создаем черный холст размером с финальное изображение
+    # Генерация маски видимой области для экспорта
     final_mask_canvas = Image.new("L", layout.total_size, 0)
-    
-    # 2. Берем альфа-канал из финального (повернутого и обрезанного) блока фото
-    # Этот канал содержит точную форму видимой фотографии
     rotated_photo_shape = final_photo_block.split()[3]
-    
-    # 3. Вставляем эту форму на черный холст в позицию фото
     final_mask_canvas.paste(rotated_photo_shape, layout.photo_pos)
-    
-    # Теперь у нас идеальная маска: Белое = Фото, Черное = Всё остальное.
 
     return PolaroidResult(
         image=final_composite,
-        photo_mask=final_mask_canvas, # Возвращаем честную маску
+        photo_mask=final_mask_canvas,
         photo_rect=(layout.photo_pos[0], layout.photo_pos[1], image.width, image.height),
         border_rect=(0, 0, layout.total_size[0], layout.total_size[1]),
         style_info={"profile": profile, "overrides": kwargs, "rotation": rotation_angle}
