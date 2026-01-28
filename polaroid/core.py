@@ -175,6 +175,12 @@ def process_image(image: Image.Image, profile: str = "classic", debug: bool = Fa
     final_mask_canvas = Image.new("L", layout.total_size, 0)
     rotated_photo_shape = final_photo_block.split()[3]
     final_mask_canvas.paste(rotated_photo_shape, layout.photo_pos)
+    
+    if config.MASK_OUTPUT_SCALE != 1.0:
+        new_w = int(layout.total_size[0] * config.MASK_OUTPUT_SCALE)
+        new_h = int(layout.total_size[1] * config.MASK_OUTPUT_SCALE)
+        
+        final_mask_canvas = final_mask_canvas.resize((new_w, new_h), Image.LANCZOS)
 
     return PolaroidResult(
         image=final_composite,
