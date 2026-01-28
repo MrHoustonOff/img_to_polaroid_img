@@ -1,4 +1,7 @@
 
+
+# GEOMETRY
+
 # Боковые поля рамки
 BORDER_SIDE_RATIO = .06
 
@@ -7,3 +10,10 @@ BORDER_TOP_RATIO = .06
 
 # Нижнее поле рамки
 BORDER_BOTTOM_RATIO = .18
+
+# VALIDATION
+
+MIN_ASPECT_RATIO = .3
+MAX_ASPECT_RATIO = 3.0
+
+MIN_IMAGE_SIZE = 50
