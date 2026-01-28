@@ -2,12 +2,14 @@ import random
 from PIL import Image, ImageChops, ImageEnhance
 from . import config
 
-def apply_grain(image: Image.Image, seed: int = None) -> Image.Image:
+def apply_grain(image: Image.Image, seed: int = None, intensity: float = None) -> Image.Image:
     """
     Наладывает "облачное" пленочное зерно (Grain 2.0).
     Использует параметры из config.py
     """
-    intensity = config.GRAIN_INTENSITY
+    if intensity is None:
+        intensity = config.GRAIN_INTENSITY
+        
     if intensity <= 0:
         return image
 
