@@ -7,10 +7,11 @@ from . import filters
 from . import chemistry
 from . import optics
 from . import chassis
+from . import texture
 from .debug import Debugger
 from .data import PolaroidResult
 
-def process_image(image: Image.Image, profile: str = "classic", debug: bool = False, **kwargs) -> PolaroidResult:
+def process_image(image: Image.Image, profile: str = "classic", debug: bool = False, generate_normal: bool = True, **kwargs) -> PolaroidResult:
     """
     Основной пайплайн обработки изображения: от проявки до сборки в картридж.
 
@@ -182,10 +183,19 @@ def process_image(image: Image.Image, profile: str = "classic", debug: bool = Fa
         
         final_mask_canvas = final_mask_canvas.resize((new_w, new_h), Image.LANCZOS)
 
+    normal_map_img = None
+    if generate_normal:
+        normal_map_img = texture.create_combined_normal(
+            total_size=layout.total_size,
+            photo_rect=(layout.photo_pos[0], layout.photo_pos[1], target_w, target_h),
+            scale_factor=0.5
+        )
+
     return PolaroidResult(
         image=final_composite,
         photo_mask=final_mask_canvas,
         photo_rect=(layout.photo_pos[0], layout.photo_pos[1], image.width, image.height),
         border_rect=(0, 0, layout.total_size[0], layout.total_size[1]),
-        style_info={"profile": profile, "overrides": kwargs, "rotation": rotation_angle}
+        style_info={"profile": profile, "overrides": kwargs, "rotation": rotation_angle},
+        normal_map=normal_map_img
     )

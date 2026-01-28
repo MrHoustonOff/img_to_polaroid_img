@@ -23,3 +23,4 @@ class PolaroidResult:
     photo_rect: Tuple[int, int, int, int]
     border_rect: Tuple[int, int, int, int]
     style_info: Dict[str, Any]
+    normal_map: Image.Image = None
