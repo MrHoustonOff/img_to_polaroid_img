@@ -20,8 +20,10 @@ MIN_IMAGE_SIZE = 50
 
 # VISUAL STYLE
 
-# Базовый цвет бумаги
-PAPER_BASE_COLOR = (254, 252, 247)
+# Цвета корпуса (Chassis Colors)
+PAPER_COLOR = (246, 242, 235)  # RGB
 
-# Интенсивность зернистости - от 0 до 1
-GRAIN_INTENSITY = 0.15
+GRIP_COLOR = (250, 250, 250)   # RGB
+
+# Какую часть нижнего поля занимает утолщение (0.0 - 1.0)
+GRIP_RATIO = 0.8
