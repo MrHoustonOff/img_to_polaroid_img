@@ -20,5 +20,8 @@ MIN_IMAGE_SIZE = 50
 
 # VISUAL STYLE
 
-#Базовый цвет бумаги
+# Базовый цвет бумаги
 PAPER_BASE_COLOR = (254, 252, 247)
+
+# Интенсивность зернистости - от 0 до 1
+GRAIN_INTENSITY = 0.15
