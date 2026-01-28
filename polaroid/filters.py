@@ -1,36 +1,31 @@
 import random
 from PIL import Image, ImageChops, ImageEnhance
+from . import config
 
-def apply_grain(image: Image.Image, intensity: float, seed: int = None) -> Image.Image:
+def apply_grain(image: Image.Image, seed: int = None) -> Image.Image:
     """
-    Наладывает эффект пленочного зерна на изображение.
-    
-    Args:
-        image: Исходное изображение.
-        intensity: Сила эффекта (0.0 - 1.0).
-        seed: Число для генератора случайных чисел.
-        
-    Returns:
-        Новое изображение с наложенным зерном.
+    Наладывает "облачное" пленочное зерно (Grain 2.0).
+    Использует параметры из config.py
     """
+    intensity = config.GRAIN_INTENSITY
     if intensity <= 0:
-        return image.copy()
+        return image
 
     if seed is not None:
         random.seed(seed)
 
-    width, height = image.size
+    w, h = image.size
     
-    # 2. Генерируем карту шума
-    noise_data = [random.randint(0, 255) for _ in range(width * height)]
+    small_w = int(w / config.GRAIN_SCALE)
+    small_h = int(h / config.GRAIN_SCALE)
     
-    # Создаем из этих данных картинку (L = черно-белая)
-    noise_layer = Image.new("L", (width, height))
+    noise_data = [random.randint(0, config.GRAIN_CUTOFF) for _ in range(small_w * small_h)]
+    
+    noise_layer = Image.new("L", (small_w, small_h))
     noise_layer.putdata(noise_data)
-
-    # 3. Смешивание (Blending)
+    
+    noise_layer = noise_layer.resize((w, h), Image.BICUBIC)
+    
     noise_layer = noise_layer.convert("RGB")
-
-    noise_layer.save("mask.jpg")
-
+    
     return Image.blend(image, noise_layer, alpha=intensity)
