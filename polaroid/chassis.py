@@ -3,66 +3,114 @@ from . import config
 from . import filters
 from .geometry import Layout
 
-def create_chassis(layout: Layout, width: int) -> Image.Image:
-    """
-    Создает "болванку" картриджа:
-    1. Форма с асимметричными углами.
-    2. Текстура бумаги (с шумом).
-    3. Текстура хваталки (с ДРУГИМ шумом).
-    4. Линия стыка.
-    
-    Возвращает изображение RGBA (на прозрачном фоне).
-    """
+from PIL import Image, ImageDraw, ImageFilter, ImageChops
+from . import config
+from . import filters
+from .geometry import Layout
+
+def create_chassis(layout: Layout, width_ref: int, photo_size: tuple, rotation_angle: float = 0.0) -> Image.Image:
     total_w, total_h = layout.total_size
+    photo_w, photo_h = photo_size
     
-    # 1. Готовим слои
     paper_layer = Image.new("RGB", (total_w, total_h), config.PAPER_COLOR)
     paper_layer = filters.apply_grain(paper_layer, intensity=config.CHASSIS_PAPER_NOISE)
 
-    # 2. Готовим слой хваталки (Grip)
-    grip_height = int(layout.total_size[1] * (config.BORDER_BOTTOM_RATIO * config.GRIP_RATIO))
+    margin_bottom = int(width_ref * config.BORDER_BOTTOM_RATIO)
+    grip_height = int(margin_bottom * config.GRIP_RATIO)
     grip_y = total_h - grip_height
     
-    grip_layer = Image.new("RGB", (total_w, grip_height), config.GRIP_COLOR)
+    # === НОВЫЙ БЛОК GRIP (ГРАДИЕНТ ВМЕСТО ЗАЛИВКИ) ===
+    
+    # 1. Вычисляем цвета градиента
+    c_top = config.GRIP_COLOR
+    # Вычисляем нижний цвет, затемняя верхний на заданный процент
+    dark_factor = 1.0 - config.GRIP_SHADE_STRENGTH
+    c_bottom = tuple(int(c * dark_factor) for c in c_top)
+
+    # 2. Создаем слой и рисуем вертикальный градиент вручную
+    grip_layer = Image.new("RGB", (total_w, grip_height))
+    pixels = grip_layer.load()
+
+    for y in range(grip_height):
+        # ratio идет от 0.0 (верх) до 1.0 (низ)
+        ratio = y / max(1, grip_height - 1)
+        # Линейная интерполяция цвета
+        r = int(c_top[0] * (1 - ratio) + c_bottom[0] * ratio)
+        g = int(c_top[1] * (1 - ratio) + c_bottom[1] * ratio)
+        b = int(c_top[2] * (1 - ratio) + c_bottom[2] * ratio)
+        # Заполняем строку пикселей этим цветом
+        for x in range(total_w):
+            pixels[x, y] = (r, g, b)
+            
+    # 3. Накладываем шум поверх градиента (как и раньше)
     grip_layer = filters.apply_grain(grip_layer, intensity=config.CHASSIS_GRIP_NOISE)
 
-    # 3. Склеиваем слои (на прямоугольный холст)
-    base = paper_layer
+    # === КОНЕЦ НОВОГО БЛОКА GRIP ===
+
+    base = paper_layer.copy()
     base.paste(grip_layer, (0, grip_y))
+    base = base.convert("RGBA")
 
-    # 4. Рисуем стык (Seam) - Тень над хваталкой
-    draw = ImageDraw.Draw(base, "RGBA")
-    seam_h = int(width * config.SEAM_HEIGHT)
-    shape = [(0, grip_y - seam_h), (total_w, grip_y)]
-    draw.rectangle(shape, fill=config.SEAM_COLOR)
+    seam_layer = Image.new("RGBA", (total_w, total_h), (0, 0, 0, 0))
+    d_seam = ImageDraw.Draw(seam_layer)
+    seam_h = int(width_ref * config.SEAM_HEIGHT)
+    
+    d_seam.rectangle(
+        [(0, grip_y - seam_h), (total_w, grip_y)], 
+        fill=(0, 0, 0, config.SEAM_OPACITY)
+    )
+    
+    blur_px = int(width_ref * config.SEAM_BLUR_RADIUS)
+    if blur_px > 0:
+        seam_layer = seam_layer.filter(ImageFilter.GaussianBlur(blur_px))
+    
+    base.alpha_composite(seam_layer)
 
-    # 5. Вырубка формы (Shape Masking)
-    mask = Image.new("L", (total_w, total_h), 0)
-    d_mask = ImageDraw.Draw(mask)
+    # === ГЕНЕРАЦИЯ МАСКИ С ПОВЕРНУТЫМ ОКНОМ ===
+    mask_base = Image.new("L", (total_w, total_h), 0)
+    d_base = ImageDraw.Draw(mask_base)
     
-    r_top = int(width * config.FRAME_CORNER_RADIUS_TOP)
-    r_bottom = int(width * config.FRAME_CORNER_RADIUS_BOTTOM)
+    r_top = int(width_ref * config.FRAME_CORNER_RADIUS_TOP)
+    r_bottom = int(width_ref * config.FRAME_CORNER_RADIUS_BOTTOM)
     
-    d_mask.rounded_rectangle((0, 0, total_w, total_h - r_bottom), radius=r_top, fill=255)
+    w, h = total_w, total_h
+    points = [
+        (0, r_top), (r_top, 0),
+        (w - r_top, 0), (w, r_top),
+        (w, h - r_bottom), (w - r_bottom, h),
+        (r_bottom, h), (0, h - r_bottom)
+    ]
+    d_base.polygon(points, fill=255)
+
+    mask_hole_layer = Image.new("L", (total_w, total_h), 0)
+    d_hole = ImageDraw.Draw(mask_hole_layer)
     
-    try:
-        d_mask.rounded_rectangle(
-            (0, 0, total_w, total_h), 
-            corners=(r_top, r_top, r_bottom, r_bottom), 
-            fill=255
+    px, py = layout.photo_pos
+    r_photo = int(width_ref * config.PHOTO_CORNER_RADIUS)
+    
+    d_hole.rounded_rectangle(
+        (px, py, px + photo_w, py + photo_h), 
+        radius=r_photo, 
+        fill=255
+    )
+    
+    cx = px + photo_w / 2
+    cy = py + photo_h / 2
+    
+    if rotation_angle != 0:
+        mask_hole_layer = mask_hole_layer.rotate(
+            rotation_angle, 
+            resample=Image.BICUBIC, 
+            center=(cx, cy)
         )
-    except TypeError:
-        d_mask.rounded_rectangle((0, 0, total_w, total_h), radius=r_top, fill=255)
+    
+    final_mask = ImageChops.subtract(mask_base, mask_hole_layer)
 
-    result = base.convert("RGBA")
-    result.putalpha(mask)
+    base.putalpha(final_mask)
+    return base
 
-    return result
-
+# Функция create_photo_mask остается без изменений, но для полноты файла:
 def create_photo_mask(size: tuple, width_ref: int) -> Image.Image:
-    """
-    Генерирует маску для фото (скругленный квадрат).
-    """
     w, h = size
     mask = Image.new("L", (w, h), 0)
     draw = ImageDraw.Draw(mask)
