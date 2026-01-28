@@ -6,11 +6,7 @@ def apply_optics(image: Image.Image) -> Image.Image:
     """
     Применяет оптические искажения: размытие, аберрацию, виньетку.
     """
-    # 1. Soft Focus
-    if config.OPTICS_BLUR_RADIUS > 0:
-        image = image.filter(ImageFilter.GaussianBlur(radius=config.OPTICS_BLUR_RADIUS))
-
-    # 2. Chromatic Aberration
+    # 1. Chromatic Aberration
     r, g, b = image.split()
     
     w, h = image.size
@@ -27,9 +23,38 @@ def apply_optics(image: Image.Image) -> Image.Image:
     
     image = Image.merge("RGB", (r_channel, g, b))
 
+    # 2. Soft focus
+    if config.OPTICS_BLUR_STRENGTH > 0:
+        blurred_image = image.filter(ImageFilter.GaussianBlur(radius=config.OPTICS_BLUR_STRENGTH))
+        
+        mask_size = (int(w/4), int(h/4))
+        blur_mask = Image.new("L", mask_size, 0)
+        
+        cx, cy = mask_size[0] / 2, mask_size[1] / 2
+        max_dist = math.sqrt(cx**2 + cy**2)
+        
+        pixel_data = []
+        sharp_radius = config.OPTICS_BLUR_SHARP_AREA # Например 0.6
+        
+        for y in range(mask_size[1]):
+            for x in range(mask_size[0]):
+                dist = math.sqrt((x - cx)**2 + (y - cy)**2)
+                norm_dist = dist / max_dist
+                
+                if norm_dist < sharp_radius:
+                    val = 0
+                else:
+                    factor = (norm_dist - sharp_radius) / (1 - sharp_radius)
+                    val = int(255 * factor)
+                
+                pixel_data.append(val)
+        
+        blur_mask.putdata(pixel_data)
+        blur_mask = blur_mask.resize((w, h), Image.BICUBIC)
+        
+        image = Image.composite(blurred_image, image, blur_mask)
+        
     # 3. Vignette
-    # L = черно-белая маска (White center, Black corners)
-    
     mask_size = (int(w/4), int(h/4)) 
     vignette_mask = Image.new("L", mask_size, 255)
     

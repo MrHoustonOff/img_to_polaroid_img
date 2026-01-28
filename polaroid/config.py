@@ -20,7 +20,7 @@ GRIP_RATIO = 0.8
 
 # === 4. CHEMISTRY ===
 # Насколько "поднимаем" черный цвет (0-255).
-CHEMISTRY_BLACK_POINT = 30
+CHEMISTRY_BLACK_POINT = 15
 
 # Shadow Tint.
 # < 1.0 - уменьшаем канал, > 1.0 - усиливаем.
@@ -30,21 +30,24 @@ CHEMISTRY_SHADOW_GREEN_SCALE = 0.95
 CHEMISTRY_SHADOW_BLUE_SCALE = 1.10
 
 # === 5. OPTICS ===
-VIGNETTE_STRENGTH = 0.5
-VIGNETTE_RADIUS = 0.4
+VIGNETTE_STRENGTH = 0.4
+VIGNETTE_RADIUS = 0.55
+
+# 0.0 - нет размытия. 2.0 - заметное "мыло" по краям.
+OPTICS_BLUR_STRENGTH = 5
+# 0.6 означает, что 60% изображения от центра будут оставаться резкими,
+OPTICS_BLUR_SHARP_AREA = 0.6
 
 # Aberration
 # 0.003 = 0.3% сдвига
-ABERRATION_OFFSET = 0.003
+ABERRATION_OFFSET = 0.0045
 
-# Soft Focus
-OPTICS_BLUR_RADIUS = 0.6
 
 # === 6. GRAIN ===
-GRAIN_INTENSITY = 0.12
+GRAIN_INTENSITY = 0.11
 
 # Grain Scale
-GRAIN_SCALE = 2.0
+GRAIN_SCALE = 2.5
 
 # Clipping
-GRAIN_CUTOFF = 180
+GRAIN_CUTOFF = 100
