@@ -4,3 +4,6 @@ __pycache__/
 .vscode/
 .idea/
 /venv
+
+playground.py
+test_images/
