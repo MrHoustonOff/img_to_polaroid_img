@@ -1,5 +1,5 @@
 from PIL import Image
-from . import validation, geometry, config
+from . import validation, geometry, config, filters
 from .data import PolaroidResult
 
 def process_image(image: Image.Image, profile: str = "classic", **kwargs) -> PolaroidResult:
@@ -20,9 +20,15 @@ def process_image(image: Image.Image, profile: str = "classic", **kwargs) -> Pol
 
     layout = geometry.calculate_layout(image.width, image.height)
 
+    seed = kwargs.get('seed', None)
+    
+    grain_intensity = kwargs.get('grain_intensity', config.GRAIN_INTENSITY)
+
+    processed_photo = filters.apply_grain(image, grain_intensity, seed)
+
     result_image = Image.new("RGB", layout.total_size, config.PAPER_BASE_COLOR)
 
-    result_image.paste(image, layout.photo_pos)
+    result_image.paste(processed_photo, layout.photo_pos)
 
     photo_mask = Image.new("L", image.size, 255) # L = Grayscale, 255 = White
 
